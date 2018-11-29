@@ -9,9 +9,8 @@ import (
 
 	"io"
 	"io/ioutil"
-	"net/http"
 	"time"
-	//TODO: Go vendor s3client
+
 	"github.com/Click2Cloud/s3client"
 	. "github.com/Click2Cloud/s3client"
 	"github.com/Click2Cloud/s3client/models"
@@ -44,20 +43,6 @@ func md5Content(data []byte) string {
 	return value
 }
 
-//This function is used to get object contain type
-//TODO: need to use out for verifying content type and verify all interfaces
-func getFileContentType(out []byte) (string, error) {
-
-	// Only the first 512 bytes are used to sniff the content type.
-	buffer := make([]byte, 512)
-
-	_ = len(buffer)
-
-	contentType := http.DetectContentType(buffer)
-
-	return contentType, nil
-}
-
 func (ad *CephAdapter) PUT(stream io.Reader, object *pb.Object, ctx context.Context) S3Error {
 	bucketName := ad.backend.BucketName
 
@@ -71,12 +56,10 @@ func (ad *CephAdapter) PUT(stream io.Reader, object *pb.Object, ctx context.Cont
 		d, err := ioutil.ReadAll(stream)
 		data := []byte(d)
 		contentMD5 := md5Content(data)
-		contentType, err := getFileContentType(data)
-
 		length := int64(len(d))
 		body := ioutil.NopCloser(bytes.NewReader(data))
 
-		err = cephObject.Create(newObjectKey, contentMD5, string(contentType), length, body, models.Private)
+		err = cephObject.Create(newObjectKey, contentMD5, "", length, body, models.Private)
 
 		if err != nil {
 			log.Logf("Upload to ceph failed:%v", err)
@@ -209,12 +192,11 @@ func (ad *CephAdapter) UploadPart(stream io.Reader,
 	uploader := cephObject.NewUploads(newObjectKey)
 	for tries <= 3 {
 		d, err := ioutil.ReadAll(stream)
-		contentType, err := getFileContentType(d)
 		data := []byte(d)
 		body := ioutil.NopCloser(bytes.NewReader(data))
 		contentMD5 := md5Content(data)
 		//length := int64(len(data))
-		part, err := uploader.UploadPart(int(partNumber), multipartUpload.UploadId, contentMD5, contentType, upBytes, body)
+		part, err := uploader.UploadPart(int(partNumber), multipartUpload.UploadId, contentMD5, "", upBytes, body)
 
 		if err != nil {
 			if tries == 3 {
@@ -268,7 +250,6 @@ func (ad *CephAdapter) CompleteMultipartUpload(multipartUpload *pb.MultipartUplo
 	return result, NoError
 }
 
-//TODO: need to figure out way to test this
 func (ad *CephAdapter) AbortMultipartUpload(multipartUpload *pb.MultipartUpload, context context.Context) S3Error {
 	newObjectKey := multipartUpload.Bucket + "/" + multipartUpload.Key
 	bucket := ad.session.NewBucket()
@@ -285,7 +266,6 @@ func (ad *CephAdapter) AbortMultipartUpload(multipartUpload *pb.MultipartUpload,
 	return NoError
 }
 
-//TODO: need to figure out way to test this
 func (ad *CephAdapter) ListParts(listParts *pb.ListParts, context context.Context) (*model.ListPartsOutput, S3Error) {
 	newObjectKey := listParts.Bucket + "/" + listParts.Key
 	bucket := ad.session.NewBucket()
